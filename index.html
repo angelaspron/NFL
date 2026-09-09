@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bolão NFL 2026-2027 | Palpites por Diferença de Placar</title>
+    <meta name="description" content="Aplicação web temática para bolão dos resultados dos jogos da NFL temporada 2026-2027 com cálculo por diferença de placar e classificação em tempo real.">
+    
+    <!-- Google Fonts: Outfit (moderno) & Chakra Petch (scoreboard digital esportivo) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Estilos do Bolão -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="https://a.espncdn.com/i/teamlogos/nfl/500/kc.png">
+</head>
+<body>
+
+    <!-- =======================================================================
+         BARRA DE NAVEGAÇÃO SUPERIOR (HEADER)
+         ======================================================================= -->
+    <header class="header-glass">
+        <div class="header-inner">
+            <!-- Marca / Logo NFL -->
+            <div class="brand-section" onclick="window.bolaoApp.switchView('table');">
+                <img src="https://static.www.nfl.com/image/upload/v1554321393/league/nvfr7ogywmanqrf0ist5.svg" 
+                     alt="NFL Shield" 
+                     class="nfl-shield-logo"
+                     onerror="this.src='https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png';">
+                <div class="brand-title-wrap">
+                    <span class="brand-title">BOLÃO NFL</span>
+                    <span class="season-tag" id="headerSeasonTag">TEMPORADA 2026-2027</span>
+                </div>
+            </div>
+
+            <!-- Abas de Navegação -->
+            <nav class="nav-tabs">
+                <button class="nav-tab-btn active" data-view="table">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                    <span>Tabela Geral</span>
+                </button>
+                <button class="nav-tab-btn" data-view="cards">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span>Apostar</span>
+                </button>
+                <button class="nav-tab-btn" data-view="leaderboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                    <span>Classificação</span>
+                </button>
+                <button class="nav-tab-btn" data-view="admin" title="Requer senha de Administrador">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Placares 🔒</span>
+                </button>
+                <button class="nav-tab-btn" data-view="settings" title="Requer senha de Administrador">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span>Configurações 🔒</span>
+                </button>
+            </nav>
+
+            <!-- Controles de Usuário & Backup -->
+            <div class="user-controls">
+                <button class="user-selector-btn" id="activeUserBtn" title="Clique para trocar de participante">
+                    <!-- Preenchido via app.js -->
+                </button>
+
+                <button class="admin-badge-btn" id="adminBadgeBtn" title="Acesso Administrador com senha Pats87">
+                    <span>⚙️ Admin</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- =======================================================================
+         CONTEÚDO PRINCIPAL
+         ======================================================================= -->
+    <main class="main-wrapper">
+
+        <!-- Banner de Regras Oficiais (Idêntico ao topo da planilha) -->
+        <section class="rules-hero">
+            <div class="rules-pills">
+                <span style="font-weight: 800; font-family: var(--font-display); color: #FFFFFF; font-size: 1rem; margin-right: 0.5rem;">
+                    REGRAS DO BOLÃO:
+                </span>
+                <div class="rule-pill">
+                    <span class="badge badge-winner" id="ruleWinnerPointsBadge">1 PONTO</span>
+                    <span>Acerto de quem ganhou (Vitória)</span>
+                </div>
+                <div class="rule-pill">
+                    <span class="badge badge-diff" id="ruleDiffPointsBadge">+1 PONTO</span>
+                    <span>Acerto da diferença de placar (🎯 Bônus)</span>
+                </div>
+                <div class="rule-pill">
+                    <span class="badge" id="ruleTotalPointsBadge" style="background: rgba(16,185,129,0.2); border: 1px solid #10B981; color: #6EE7B7;">2 PONTOS TOTAL</span>
+                    <span>Acerto perfeito (Vencedor + Dif exata)</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <span style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 0.35rem;">
+                    🔒 Protegido com senha
+                </span>
+            </div>
+        </section>
+
+        <!-- Cartões de Resumo dos Participantes (Pontos Totais + Acertos de Dif.) -->
+        <section class="score-summary-grid" id="scoreSummaryGrid">
+            <!-- Preenchido via app.js (Cards de Angel, Caio, Dinho...) -->
+        </section>
+
+        <!-- Barra de Seleção de Semanas -->
+        <section class="week-nav-bar" id="weekNavBarSection">
+            <div class="week-pills-scroll" id="weekPillsContainer">
+                <!-- Botões de semanas (Semana 1 à 18) -->
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
+                <span>🕒 Horários de Brasília (BRT) • Oficial DAZN</span>
+            </div>
+        </section>
+
+        <!-- Área Dinâmica das Telas (Tabela / Cartões / Classificação / Admin / Configurações) -->
+        <div id="mainContentArea">
+            <!-- Conteúdo carregado dinamicamente via app.js -->
+        </div>
+
+    </main>
+
+    <!-- =======================================================================
+         MODAL DE AUTENTICAÇÃO DO ADMINISTRADOR (SENHA Pats87)
+         ======================================================================= -->
+    <div class="modal-overlay" id="adminAuthModal">
+        <div class="modal-card" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3 class="modal-title">🔐 Acesso do Administrador</h3>
+                <button class="btn-close-modal">&times;</button>
+            </div>
+            <form id="formAdminAuth">
+                <div class="modal-body">
+                    <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                        Digite a senha de administrador para lançar placares reais dos jogos ou alterar regras e configurações:
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label">Senha de Administrador</label>
+                        <input type="password" id="inputAdminPassword" class="form-input" placeholder="Digite a senha" required autofocus>
+                    </div>
+                    <div id="adminAuthError" style="display: none; color: #EF4444; font-size: 0.82rem; font-weight: 600;">
+                        ❌ Senha incorreta! Tente novamente.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Entrar como Admin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =======================================================================
+         MODAL: TROCA DE USUÁRIO RÁPIDA
+         ======================================================================= -->
+    <div class="modal-overlay" id="userManageModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">🏈 Alternar Participante</h3>
+                <button class="btn-close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                    Selecione com qual participante você deseja apostar ou visualizar:
+                </p>
+
+                <!-- Lista de Usuários Existentes -->
+                <div style="display: flex; flex-direction: column; gap: 0.6rem;" id="modalUserList">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-close-modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =======================================================================
+         MODAL: ADICIONAR NOVO JOGO
+         ======================================================================= -->
+    <div class="modal-overlay" id="addMatchModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">➕ Adicionar Nova Partida</h3>
+                <button class="btn-close-modal">&times;</button>
+            </div>
+            <form id="formAddMatch">
+                <div class="modal-body">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+                        <div class="form-group">
+                            <label class="form-label">Semana</label>
+                            <input type="number" id="newMatchWeek" class="form-input" min="1" max="22" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Data</label>
+                            <input type="text" id="newMatchDate" class="form-input" placeholder="Dom 15/09" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Horário (BRT)</label>
+                            <input type="text" id="newMatchTime" class="form-input" placeholder="14:00" required>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div class="form-group">
+                            <label class="form-label">Time Visitante (1)</label>
+                            <select id="newMatchTeam1" class="form-select" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Time Mandante (2)</label>
+                            <select id="newMatchTeam2" class="form-select" required></select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Adicionar Jogo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Container para Toasts de Notificação -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts da Aplicação -->
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
