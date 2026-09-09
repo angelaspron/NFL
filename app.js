@@ -28,12 +28,177 @@ class BolaoApp {
             saveBolaoData(this.data);
         }
 
-        // Ativa escuta em Tempo Real para atualizações simultâneas de outros participantes
-        setupRealtimeSubscription((newData) => {
-            this.data = newData;
-            this.renderAll();
-            this.showToast("🔄 Dados sincronizados em tempo real!", "info");
+        // Ativa a sincronização automática com a ESPN se configurada
+        if (this.data.settings.autoSyncEspn) {
+            this.startAutoSyncEspn();
+        }
+    }
+
+    // =========================================================================
+    // INTEGRAÇÃO COM A API DA ESPN (ATUALIZAÇÃO AUTOMÁTICA DE PLACARES)
+    // =========================================================================
+
+    normalizeTeamAbbr(abbr) {
+        if (!abbr) return "";
+        const map = {
+            WAS: "WSH",
+            WSH: "WSH",
+            JAC: "JAX",
+            JAX: "JAX",
+            LA: "LAR",
+            LAR: "LAR",
+            SD: "LAC",
+            LAC: "LAC",
+            OAK: "LV",
+            LV: "LV",
+            STL: "LAR"
+        };
+        const upper = String(abbr).toUpperCase().trim();
+        return map[upper] || upper;
+    }
+
+    async fetchEspnScores(week = 1, seasonType = 2) {
+        try {
+            const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=${seasonType}&week=${week}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            return data.events || [];
+        } catch (err) {
+            console.error(`Erro ao buscar dados da ESPN para Semana ${week}:`, err);
+            return null;
+        }
+    }
+
+    async syncWeekFromEspn(week = this.currentWeek, showToastNotification = true) {
+        const events = await this.fetchEspnScores(week, 2);
+        if (!events || events.length === 0) {
+            if (showToastNotification) {
+                this.showToast(`Nenhum dado encontrado na ESPN para a Semana ${week}.`, "warning");
+            }
+            return 0;
+        }
+
+        let updatedCount = 0;
+
+        events.forEach(event => {
+            const comp = event.competitions?.[0];
+            if (!comp || !comp.competitors || comp.competitors.length < 2) return;
+
+            const comp1 = comp.competitors[0];
+            const comp2 = comp.competitors[1];
+
+            const teamA = this.normalizeTeamAbbr(comp1.team?.abbreviation);
+            const teamB = this.normalizeTeamAbbr(comp2.team?.abbreviation);
+
+            const scoreA = comp1.score !== undefined && comp1.score !== "" ? parseInt(comp1.score, 10) : null;
+            const scoreB = comp2.score !== undefined && comp2.score !== "" ? parseInt(comp2.score, 10) : null;
+
+            const isCompleted = comp.status?.type?.completed === true || comp.status?.type?.state === "post";
+            const isInProgress = comp.status?.type?.state === "in";
+
+            const match = this.data.matches.find(m => {
+                if (m.week !== week) return false;
+                const m1 = this.normalizeTeamAbbr(m.team1);
+                const m2 = this.normalizeTeamAbbr(m.team2);
+                return (m1 === teamA && m2 === teamB) || (m1 === teamB && m2 === teamA);
+            });
+
+            if (match) {
+                const m1 = this.normalizeTeamAbbr(match.team1);
+                let targetScore1 = null;
+                let targetScore2 = null;
+
+                if (m1 === teamA) {
+                    targetScore1 = scoreA;
+                    targetScore2 = scoreB;
+                } else {
+                    targetScore1 = scoreB;
+                    targetScore2 = scoreA;
+                }
+
+                let targetStatus = match.status;
+                if (isCompleted) {
+                    targetStatus = "finished";
+                } else if (isInProgress) {
+                    targetStatus = "in_progress";
+                } else {
+                    targetStatus = "scheduled";
+                }
+
+                if (isCompleted || isInProgress || (targetScore1 !== null && targetScore2 !== null)) {
+                    if (match.score1 !== targetScore1 || match.score2 !== targetScore2 || match.status !== targetStatus) {
+                        match.score1 = targetScore1;
+                        match.score2 = targetScore2;
+                        match.status = targetStatus;
+                        updatedCount++;
+                    }
+                }
+            }
         });
+
+        if (updatedCount > 0) {
+            this.data.lastEspnSync = new Date().toISOString();
+            saveBolaoData(this.data);
+            this.renderAll();
+            if (showToastNotification) {
+                this.showToast(`⚡ ESPN Sync: ${updatedCount} jogo(s) atualizado(s) na Semana ${week}!`, "success");
+            }
+        } else if (showToastNotification) {
+            this.showToast(`⚡ ESPN Sync: Jogos da Semana ${week} já estão atualizados com a ESPN.`, "info");
+        }
+
+        return updatedCount;
+    }
+
+    async syncAllWeeksFromEspn() {
+        if (this.isSyncingEspn) return;
+        this.isSyncingEspn = true;
+        this.showToast("⏳ Buscando placares da ESPN para todas as 18 semanas...", "info");
+        let totalUpdated = 0;
+        for (let w = 1; w <= 18; w++) {
+            const count = await this.syncWeekFromEspn(w, false);
+            totalUpdated += count;
+        }
+
+        this.isSyncingEspn = false;
+        this.data.lastEspnSync = new Date().toISOString();
+        saveBolaoData(this.data);
+        this.renderAll();
+
+        if (totalUpdated > 0) {
+            this.showToast(`✅ ESPN Sync Concluído! ${totalUpdated} placares atualizados na temporada.`, "success");
+        } else {
+            this.showToast("ℹ️ ESPN Sync Concluído: Todos os placares já estão sincronizados.", "info");
+        }
+    }
+
+    startAutoSyncEspn() {
+        if (this.autoSyncTimer) clearInterval(this.autoSyncTimer);
+        this.autoSyncTimer = setInterval(() => {
+            this.syncWeekFromEspn(this.currentWeek, false);
+        }, 60000);
+    }
+
+    stopAutoSyncEspn() {
+        if (this.autoSyncTimer) {
+            clearInterval(this.autoSyncTimer);
+            this.autoSyncTimer = null;
+        }
+    }
+
+    toggleAutoSyncEspn() {
+        const current = !!this.data.settings.autoSyncEspn;
+        this.data.settings.autoSyncEspn = !current;
+        if (this.data.settings.autoSyncEspn) {
+            this.startAutoSyncEspn();
+            this.showToast("🟢 Atualização Automática via ESPN ativada (a cada 60s)!", "success");
+        } else {
+            this.stopAutoSyncEspn();
+            this.showToast("🔴 Atualização Automática via ESPN desativada.", "warning");
+        }
+        saveBolaoData(this.data);
+        this.renderAll();
     }
 
     // =========================================================================
@@ -306,13 +471,21 @@ class BolaoApp {
             <button class="week-btn ${w === this.currentWeek ? 'active' : ''}" data-week="${w}">
                 Semana ${w}
             </button>
-        `).join("");
+        `).join("") + `
+            <button class="week-btn" id="btnSyncEspnHeader" style="background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.5); color: #FACC15; font-weight: 700; margin-left: 0.5rem;" title="Atualizar placares desta semana via ESPN">
+                ⚡ ESPN Live
+            </button>
+        `;
 
-        container.querySelectorAll(".week-btn").forEach(btn => {
+        container.querySelectorAll(".week-btn[data-week]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 this.currentWeek = parseInt(e.currentTarget.dataset.week, 10);
                 this.renderAll();
             });
+        });
+
+        document.getElementById("btnSyncEspnHeader")?.addEventListener("click", () => {
+            this.syncWeekFromEspn(this.currentWeek);
         });
     }
 
@@ -885,12 +1058,21 @@ class BolaoApp {
                         Área protegida por senha (<strong style="color: #38BDF8;">Pats87</strong>). Digite os placares oficiais. O sistema apura o vencedor e a diferença automaticamente!
                     </p>
                 </div>
-                <div style="display: flex; gap: 0.75rem;">
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button class="btn btn-warning" id="btnSyncEspnAdminWeek" style="background: rgba(234, 179, 8, 0.15); border-color: #EAB308; color: #FACC15;">
+                        ⚡ ESPN Sync (Semana ${this.currentWeek})
+                    </button>
+                    <button class="btn btn-primary" id="btnSyncEspnAdminAll">
+                        🔄 Sync 18 Semanas
+                    </button>
+                    <button class="btn ${this.data.settings.autoSyncEspn ? 'btn-success' : 'btn-secondary'}" id="btnToggleAutoSyncAdmin">
+                        ${this.data.settings.autoSyncEspn ? '🟢 Auto-Sync ON' : '🔴 Auto-Sync OFF'}
+                    </button>
                     <button class="btn btn-secondary" id="btnAddCustomMatch">
                         ➕ Adicionar Jogo
                     </button>
                     <button class="btn btn-success" id="btnSaveAdminAllScores">
-                        💾 Salvar Todos os Placares
+                        💾 Salvar Placares
                     </button>
                 </div>
             </div>
@@ -990,6 +1172,18 @@ class BolaoApp {
             saveBolaoData(this.data);
             this.showToast("Placares e dados salvos com sucesso!", "success");
             this.renderAll();
+        });
+
+        document.getElementById("btnSyncEspnAdminWeek")?.addEventListener("click", () => {
+            this.syncWeekFromEspn(this.currentWeek);
+        });
+
+        document.getElementById("btnSyncEspnAdminAll")?.addEventListener("click", () => {
+            this.syncAllWeeksFromEspn();
+        });
+
+        document.getElementById("btnToggleAutoSyncAdmin")?.addEventListener("click", () => {
+            this.toggleAutoSyncEspn();
         });
 
         document.getElementById("btnAddCustomMatch")?.addEventListener("click", () => {
@@ -1174,7 +1368,32 @@ class BolaoApp {
                     </form>
                 </div>
 
-                <!-- SEÇÃO 4: BACKUP E DADOS -->
+                <!-- SEÇÃO 4: INTEGRAÇÃO COM API DA ESPN (PLACARES AO VIVO) -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span class="settings-card-title">⚡ Integração com API da ESPN</span>
+                        <span style="font-size: 0.8rem; color: ${this.data.settings.autoSyncEspn ? '#34D399' : '#94A3B8'};">
+                            Status Auto-Sync: <strong>${this.data.settings.autoSyncEspn ? '🟢 ATIVADO (60s)' : '🔴 DESATIVADO'}</strong>
+                        </span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+                        A API oficial da ESPN atualiza automaticamente placares, resultados e status dos confrontos da temporada 2026.
+                        ${this.data.lastEspnSync ? `<br><span style="color: #38BDF8; font-size: 0.8rem;">🕒 Última sincronização: ${new Date(this.data.lastEspnSync).toLocaleString('pt-BR')}</span>` : ''}
+                    </p>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button class="btn btn-warning" id="btnSyncEspnSettingsWeek" style="background: rgba(234, 179, 8, 0.15); border-color: #EAB308; color: #FACC15;">
+                            ⚡ Sincronizar Semana ${this.currentWeek}
+                        </button>
+                        <button class="btn btn-primary" id="btnSyncEspnSettingsAll">
+                            🔄 Sincronizar Todas as 18 Semanas
+                        </button>
+                        <button class="btn ${this.data.settings.autoSyncEspn ? 'btn-danger' : 'btn-success'}" id="btnToggleAutoSyncSettings">
+                            ${this.data.settings.autoSyncEspn ? '🔴 Desativar Auto-Sync' : '🟢 Ativar Auto-Sync (60s)'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SEÇÃO 5: BACKUP E DADOS -->
                 <div class="settings-card settings-danger-zone">
                     <div class="settings-card-header">
                         <span class="settings-card-title" style="color: #F87171;">⚠️ Gerenciamento de Dados & Backup</span>
@@ -1241,6 +1460,19 @@ class BolaoApp {
                 this.showToast(`Regras atualizadas: Vitória = ${w} pt | Dif exata = +${d} pt!`, "success");
                 this.renderAll();
             });
+        });
+
+        // Eventos dos botões da ESPN em Configurações
+        document.getElementById("btnSyncEspnSettingsWeek")?.addEventListener("click", () => {
+            this.syncWeekFromEspn(this.currentWeek);
+        });
+
+        document.getElementById("btnSyncEspnSettingsAll")?.addEventListener("click", () => {
+            this.syncAllWeeksFromEspn();
+        });
+
+        document.getElementById("btnToggleAutoSyncSettings")?.addEventListener("click", () => {
+            this.toggleAutoSyncEspn();
         });
 
         // Salvar participante individual

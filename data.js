@@ -44,7 +44,8 @@ const INITIAL_BOLAO_DATA = {
         pointsWinner: 1,
         pointsExactDiff: 1,
         timezone: "America/Sao_Paulo",
-        adminPassword: "Pats87"
+        adminPassword: "Pats87",
+        autoSyncEspn: false
     },
     participants: [
         { id: "user_angel", name: "Angel", avatar: "\u{1F3C8}", favTeam: "KC", createdAt: "2026-09-01T10:00:00Z" },
