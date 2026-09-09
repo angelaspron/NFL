@@ -1180,14 +1180,21 @@ class BolaoApp {
                         <span class="settings-card-title" style="color: #F87171;">⚠️ Gerenciamento de Dados & Backup</span>
                     </div>
                     <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-                        Você pode exportar um arquivo JSON com todas as apostas para compartilhar com os amigos ou restaurar quando necessário.
+                        Você pode exportar e importar backups do Bolão em formato <strong>Excel (.xlsx)</strong> ou <strong>JSON</strong> para guardar seus dados, editar planilhas offline ou restaurar a qualquer momento.
                     </p>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" id="btnExportDataExcel" style="background: rgba(16, 185, 129, 0.15); border-color: #10B981; color: #6EE7B7;">
+                            📊 Exportar Backup (Excel .xlsx)
+                        </button>
+                        <label class="btn btn-secondary" style="cursor: pointer; background: rgba(16, 185, 129, 0.15); border-color: #10B981; color: #6EE7B7;">
+                            📥 Importar Backup (Excel .xlsx)
+                            <input type="file" id="importExcelInputSettings" accept=".xlsx, .xls" style="display: none;">
+                        </label>
                         <button class="btn btn-secondary" id="btnExportDataSettings">
-                            💾 Exportar Backup (JSON)
+                            💾 Exportar (JSON)
                         </button>
                         <label class="btn btn-secondary" style="cursor: pointer;">
-                            📥 Importar Backup (JSON)
+                            📥 Importar (JSON)
                             <input type="file" id="importFileInputSettings" accept=".json" style="display: none;">
                         </label>
                         <button class="btn btn-danger" id="btnClearAllBets">
@@ -1341,14 +1348,24 @@ class BolaoApp {
             });
         });
 
-        // Exportar backup
+        // Exportar backup JSON
         document.getElementById("btnExportDataSettings")?.addEventListener("click", () => {
             this.exportDataJson();
         });
 
-        // Importar backup
+        // Importar backup JSON
         document.getElementById("importFileInputSettings")?.addEventListener("change", (e) => {
             this.handleImportJson(e);
+        });
+
+        // Exportar backup Excel
+        document.getElementById("btnExportDataExcel")?.addEventListener("click", () => {
+            this.exportDataExcel();
+        });
+
+        // Importar backup Excel
+        document.getElementById("importExcelInputSettings")?.addEventListener("change", (e) => {
+            this.handleImportExcel(e);
         });
     }
 
@@ -1431,7 +1448,7 @@ class BolaoApp {
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
-        this.showToast("Backup exportado com sucesso!", "success");
+        this.showToast("Backup JSON exportado com sucesso!", "success");
     }
 
     handleImportJson(e) {
@@ -1445,7 +1462,7 @@ class BolaoApp {
                 if (imported.participants && imported.matches) {
                     this.data = imported;
                     saveBolaoData(this.data);
-                    this.showToast("Dados importados com sucesso!", "success");
+                    this.showToast("Dados importados com sucesso via JSON!", "success");
                     this.renderAll();
                 } else {
                     alert("Arquivo JSON inválido para o Bolão!");
@@ -1455,6 +1472,174 @@ class BolaoApp {
             }
         };
         reader.readAsText(file);
+    }
+
+    exportDataExcel() {
+        if (!window.XLSX) {
+            alert("Biblioteca Excel não foi carregada corretamente. Verifique sua conexão com a internet.");
+            return;
+        }
+
+        try {
+            const wb = XLSX.utils.book_new();
+
+            // Aba 1: Confrontos & Placares Oficiais
+            const matchesData = this.data.matches.map(m => ({
+                ID: m.id,
+                Semana: m.week,
+                Data: m.date,
+                Horario: m.time,
+                Visitante: m.team1,
+                Placar_Visitante: m.score1 !== null && m.score1 !== undefined ? m.score1 : "",
+                Mandante: m.team2,
+                Placar_Mandante: m.score2 !== null && m.score2 !== undefined ? m.score2 : "",
+                Status: m.status || "scheduled"
+            }));
+            const wsMatches = XLSX.utils.json_to_sheet(matchesData);
+            XLSX.utils.book_append_sheet(wb, wsMatches, "Jogos_e_Placares");
+
+            // Aba 2: Palpites dos Participantes
+            const predictionsRows = [];
+            this.data.matches.forEach(m => {
+                const matchPreds = this.data.predictions[m.id] || {};
+                this.data.participants.forEach(p => {
+                    const pred = matchPreds[p.id] || {};
+                    predictionsRows.push({
+                        Jogo_ID: m.id,
+                        Semana: m.week,
+                        Jogo: `${m.team1} @ ${m.team2}`,
+                        Participante_ID: p.id,
+                        Participante_Nome: p.name,
+                        Time_Apostado: pred.winner || "",
+                        Diferenca_Pontos: pred.diff !== null && pred.diff !== undefined ? pred.diff : ""
+                    });
+                });
+            });
+            const wsPredictions = XLSX.utils.json_to_sheet(predictionsRows);
+            XLSX.utils.book_append_sheet(wb, wsPredictions, "Palpites");
+
+            // Aba 3: Participantes
+            const participantsData = this.data.participants.map(p => ({
+                ID: p.id,
+                Nome: p.name,
+                Avatar: p.avatar,
+                Time_Coracao: p.favTeam
+            }));
+            const wsParticipants = XLSX.utils.json_to_sheet(participantsData);
+            XLSX.utils.book_append_sheet(wb, wsParticipants, "Participantes");
+
+            // Aba 4: Configurações do Bolão
+            const settingsData = [
+                { Chave: "pointsWinner", Valor: this.data.settings.pointsWinner },
+                { Chave: "pointsExactDiff", Valor: this.data.settings.pointsExactDiff },
+                { Chave: "season", Valor: this.data.settings.season },
+                { Chave: "adminPassword", Valor: this.data.settings.adminPassword || "Pats87" }
+            ];
+            const wsSettings = XLSX.utils.json_to_sheet(settingsData);
+            XLSX.utils.book_append_sheet(wb, wsSettings, "Configuracoes");
+
+            const fileName = `bolao_nfl_2026_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            this.showToast("Backup em Excel (.xlsx) exportado com sucesso!", "success");
+        } catch (err) {
+            console.error("Erro ao exportar Excel:", err);
+            alert("Erro ao gerar planilha Excel: " + err.message);
+        }
+    }
+
+    handleImportExcel(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!window.XLSX) {
+            alert("Biblioteca Excel não disponível.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // Ler Jogos_e_Placares
+                if (workbook.Sheets["Jogos_e_Placares"]) {
+                    const matchesRows = XLSX.utils.sheet_to_json(workbook.Sheets["Jogos_e_Placares"]);
+                    matchesRows.forEach(row => {
+                        const targetMatch = this.data.matches.find(m => m.id === row.ID || (m.week === row.Semana && m.team1 === row.Visitante && m.team2 === row.Mandante));
+                        if (targetMatch) {
+                            targetMatch.score1 = (row.Placar_Visitante !== "" && row.Placar_Visitante !== undefined && row.Placar_Visitante !== null) ? parseInt(row.Placar_Visitante, 10) : null;
+                            targetMatch.score2 = (row.Placar_Mandante !== "" && row.Placar_Mandante !== undefined && row.Placar_Mandante !== null) ? parseInt(row.Placar_Mandante, 10) : null;
+                            if (row.Status) targetMatch.status = row.Status;
+                        }
+                    });
+                }
+
+                // Ler Participantes
+                if (workbook.Sheets["Participantes"]) {
+                    const participantsRows = XLSX.utils.sheet_to_json(workbook.Sheets["Participantes"]);
+                    participantsRows.forEach(row => {
+                        let existing = this.data.participants.find(p => p.id === row.ID || p.name === row.Nome);
+                        if (existing) {
+                            if (row.Nome) existing.name = row.Nome;
+                            if (row.Avatar) existing.avatar = row.Avatar;
+                            if (row.Time_Coracao) existing.favTeam = row.Time_Coracao;
+                        } else if (row.Nome) {
+                            this.data.participants.push({
+                                id: row.ID || ("user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4)),
+                                name: row.Nome,
+                                avatar: row.Avatar || "🏈",
+                                favTeam: row.Time_Coracao || "KC",
+                                createdAt: new Date().toISOString()
+                            });
+                        }
+                    });
+                }
+
+                // Ler Palpites
+                if (workbook.Sheets["Palpites"]) {
+                    const predictionsRows = XLSX.utils.sheet_to_json(workbook.Sheets["Palpites"]);
+                    predictionsRows.forEach(row => {
+                        const matchId = row.Jogo_ID;
+                        const userId = row.Participante_ID;
+                        const winner = row.Time_Apostado;
+                        const diff = row.Diferenca_Pontos;
+
+                        if (matchId && userId && winner) {
+                            if (!this.data.predictions[matchId]) {
+                                this.data.predictions[matchId] = {};
+                            }
+                            this.data.predictions[matchId][userId] = {
+                                winner: winner,
+                                diff: parseInt(diff, 10) || 0,
+                                updatedAt: new Date().toISOString()
+                            };
+                        }
+                    });
+                }
+
+                // Ler Configuracoes
+                if (workbook.Sheets["Configuracoes"]) {
+                    const settingsRows = XLSX.utils.sheet_to_json(workbook.Sheets["Configuracoes"]);
+                    settingsRows.forEach(row => {
+                        if (row.Chave && row.Valor !== undefined) {
+                            this.data.settings[row.Chave] = row.Valor;
+                        }
+                    });
+                }
+
+                saveBolaoData(this.data);
+                this.showToast("Backup em Excel importado e sincronizado com sucesso!", "success");
+                this.renderAll();
+
+                // Limpa o input de arquivo
+                e.target.value = "";
+            } catch (err) {
+                console.error("Erro ao ler Excel:", err);
+                alert("Erro ao importar planilha Excel: " + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
     }
 
     bindEvents() {
