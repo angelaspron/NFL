@@ -14,9 +14,26 @@ class BolaoApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.bindEvents();
         this.renderAll();
+
+        // Tenta buscar os dados atualizados da nuvem no arranque
+        const remoteData = await fetchRemoteBolaoData();
+        if (remoteData) {
+            this.data = remoteData;
+            this.renderAll();
+        } else {
+            // Se for o primeiro acesso e a nuvem ainda estiver vazia, salva a base atual na nuvem
+            saveBolaoData(this.data);
+        }
+
+        // Ativa escuta em Tempo Real para atualizações simultâneas de outros participantes
+        setupRealtimeSubscription((newData) => {
+            this.data = newData;
+            this.renderAll();
+            this.showToast("🔄 Dados sincronizados em tempo real!", "info");
+        });
     }
 
     // =========================================================================

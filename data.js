@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // BOLÃƒO NFL 2026-2027 - BANCO DE DADOS OFICIAL DA TEMPORADA 2026-2027
 // CalendÃ¡rio Oficial DAZN / NFL
 // =============================================================================
@@ -2773,9 +2773,6 @@ const INITIAL_BOLAO_DATA = {
         "score1":  null,
         "team2":  "ARI",
         "score2":  null,
-        "team1":  "SF",
-        "time":  "TBD",
-        "date":  "Dom, 10/01",
         "status":  "scheduled",
         "week":  18
     }
@@ -2783,6 +2780,21 @@ const INITIAL_BOLAO_DATA = {
 ,
     predictions: {}
 };
+
+// =============================================================================
+// CONEXÃO COM A NUVEM SUPABASE (SINCRONIZAÇÃO EM TEMPO REAL)
+// =============================================================================
+const SUPABASE_URL = "https://ynxmtzgucuxtnkhtdryu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlueG10emd1Y3V4dG5raHRkcnl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2ODMzNjksImV4cCI6MjEwMzI1OTM2OX0.WZB7xvvxgSisYK_fgoUO3i6e_JweQf-TRRLFaH9qjow";
+
+let supabaseClient = null;
+if (window.supabase) {
+    try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (err) {
+        console.error("Erro ao inicializar Supabase:", err);
+    }
+}
 
 function loadBolaoData() {
     try {
@@ -2808,4 +2820,58 @@ function saveBolaoData(data) {
     } catch (e) {
         console.error("Erro ao salvar dados no localStorage:", e);
     }
+
+    if (supabaseClient) {
+        supabaseClient
+            .from("nfl_bolao_store")
+            .upsert({ id: "main_data", data: data, updated_at: new Date().toISOString() })
+            .then(({ error }) => {
+                if (error) console.error("Erro ao sincronizar com nuvem (Supabase):", error);
+            });
+    }
+}
+
+async function fetchRemoteBolaoData() {
+    if (!supabaseClient) return null;
+    try {
+        const { data, error } = await supabaseClient
+            .from("nfl_bolao_store")
+            .select("data")
+            .eq("id", "main_data")
+            .single();
+
+        if (error) {
+            console.warn("Nenhum dado remoto encontrado ainda ou erro ao buscar:", error.message);
+            return null;
+        }
+
+        if (data && data.data) {
+            localStorage.setItem("nfl_bolao_2026_data_v2", JSON.stringify(data.data));
+            return data.data;
+        }
+    } catch (err) {
+        console.error("Exceção ao buscar dados remotos:", err);
+    }
+    return null;
+}
+
+function setupRealtimeSubscription(onRemoteUpdateCallback) {
+    if (!supabaseClient) return;
+
+    supabaseClient
+        .channel("public:nfl_bolao_store")
+        .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "nfl_bolao_store", filter: "id=eq.main_data" },
+            (payload) => {
+                if (payload.new && payload.new.data) {
+                    const newData = payload.new.data;
+                    localStorage.setItem("nfl_bolao_2026_data_v2", JSON.stringify(newData));
+                    if (onRemoteUpdateCallback) {
+                        onRemoteUpdateCallback(newData);
+                    }
+                }
+            }
+        )
+        .subscribe();
 }
